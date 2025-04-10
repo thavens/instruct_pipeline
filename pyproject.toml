@@ -1,0 +1,28 @@
+[project]
+name = "test"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flash-attn>=2.7.4.post1",
+    "ninja>=1.11.1.4",
+    "packaging>=24.2",
+    "sglang[all]>=0.4.4.post4",
+    "torch",
+    "torchaudio",
+    "torchvision",
+    "trl",
+    "vllm>=0.7.2",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+torchvision = { index = "pytorch" }
+torchaudio = { index = "pytorch" }
+trl = { path = "Trl", editable = true }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
