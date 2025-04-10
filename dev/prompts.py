@@ -1,8 +1,11 @@
 from openai import OpenAI
 import re
 
-client = OpenAI(api_key="None", base_url=f"http://0.0.0.0:{30000}/v1")
-model_name = client.models.list().data[0].id
+try:
+    client = OpenAI(api_key="None", base_url=f"http://0.0.0.0:{30000}/v1")
+    model_name = client.models.list().data[0].id
+except:
+    print("Openai server not available. Continuing anyways")
 
 tools_desc = [
     {
@@ -54,12 +57,12 @@ GET_INSTRUCTIONS_PROMPT = """<system_prompt>
 {system}
 </system_prompt>
 
-You have be shown the system prompt for an AI assistant.
+You have been shown the system prompt for an AI assistant.
 Extract all instructions that mandate or forbid behaviors. The behaviors can be general (e.g. "no talking about politics") or specific (e.g. "start your responses with 'Hello!'").
-Merge closely related or conditional instructions.
-Modify instructions to make more sense if sensible.
+Merge related or conditional instructions.
+Modify instructions to make sense if desired.
 
-You can begin your response with some thinking, the respond with each clause inside its own <clause>...</clause> xml block.
+You can begin your response with some thinking, then respond with each clause inside its own <clause>...</clause> xml block.
 It's possible there are no instructions at all, in which you should not write any <clause>...</clause> xml tags.
 Example:
 <clause>Instruction 1</clause>
@@ -86,6 +89,16 @@ Change the subject of the instruction from second person to third person.
 Respond in xml tags with <third_person>...</third_person>.
 Just repeat the instruction in the <third_person>...</third_person> xml tags if there are no second person pronouns.
 """
+
+INDUCE_INSTRUCTION_PROMPT = """I have this prompt:
+<prompt>
+{system}
+</prompt>
+
+It contains the instruction: <instruction>{instruction}</instruction>
+
+Add 1 new and specific instruction based on <instruction> within <new_instruction>...</new_instruction> xml.
+The new instruction must be defined such that it would be clear if or if not a response follows the new instruction"""
 
 
 def summarize_instructions(sys_prompt):

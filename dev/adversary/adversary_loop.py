@@ -6,7 +6,7 @@ from datasets import load_dataset
 from tqdm.contrib.concurrent import thread_map
 import yaml
 
-from adversary import LLMTools
+from dev.adversary import LLMTools
 
 dataset = load_dataset("normster/RealGuardrails", "prompts", split="train")
 dataset = dataset.filter(lambda x: x["is_sft"] and len(x["clauses"]) > 3)[:50]

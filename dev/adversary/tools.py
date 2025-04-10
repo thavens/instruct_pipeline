@@ -2,7 +2,7 @@ import json
 from openai import OpenAI
 import re
 import random
-from adversary.prompts import get_instructions, summarize_instructions, change_POV
+from dev.prompts import get_instructions, summarize_instructions, change_POV
 
 try:
     client = OpenAI(api_key="None", base_url=f"http://0.0.0.0:{30000}/v1")
