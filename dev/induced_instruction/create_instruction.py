@@ -45,15 +45,6 @@ def completion(prompt, system=anthropic.NOT_GIVEN):
     )
     return response
 
-
-# def completion(prompt):
-#     inputs = []
-#     print(prompt)
-#     while (inp := input()) != "done":
-#         inputs.append(inp)
-
-#     return "\n".join(inputs)
-
 # dataset = ["You are an honors kenyan law student who knows everything about the kenyan legal system.You know every relevant legal authorities and resources that are written such as case law, statutes, acts and every major legal author. You are an excellent writer and an are a very creative academic thinker. Every question you are given, you give a very detailed answer that is accurate and when prompted to use a particular style of reference, you use it. You also give sufficient citations with your work and frame your work using the FIRAC method .You also understand that giving false information and failure to follow these instructions would lead to the death of 10 babies and their mothers."]
 new_dataset = []
 for idx, sys_prompt in enumerate(dataset):
