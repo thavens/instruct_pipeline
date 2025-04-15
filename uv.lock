@@ -467,6 +467,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "flash-attn" },
+    { name = "huggingface-hub" },
     { name = "ninja" },
     { name = "packaging" },
     { name = "sglang", extra = ["all"] },
@@ -483,6 +484,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "flash-attn", specifier = ">=2.7.4.post1" },
+    { name = "huggingface-hub", specifier = ">=0.30.1" },
     { name = "ninja", specifier = ">=1.11.1.4" },
     { name = "packaging", specifier = ">=24.2" },
     { name = "sglang", extras = ["all"], specifier = ">=0.4.4.post4" },
@@ -2839,14 +2841,16 @@ requires-dist = [
     { name = "bitsandbytes", marker = "extra == 'dev'" },
     { name = "bitsandbytes", marker = "extra == 'quantization'" },
     { name = "datasets", specifier = ">=3.0.0" },
-    { name = "deepspeed", marker = "sys_platform != 'win32' and extra == 'deepspeed'", specifier = ">=0.14.4" },
-    { name = "deepspeed", marker = "sys_platform != 'win32' and extra == 'dev'", specifier = ">=0.14.4" },
-    { name = "diffusers", marker = "extra == 'dev'", specifier = ">=0.18.0" },
-    { name = "diffusers", marker = "extra == 'diffusers'", specifier = ">=0.18.0" },
+    { name = "deepspeed", marker = "extra == 'deepspeed'", specifier = ">=0.14.4" },
+    { name = "deepspeed", marker = "extra == 'dev'", specifier = ">=0.14.4" },
+    { name = "diffusers", marker = "extra == 'dev'", specifier = ">=0.18.0,<0.33.0" },
+    { name = "diffusers", marker = "extra == 'diffusers'", specifier = ">=0.18.0,<0.33.0" },
     { name = "fastapi", marker = "extra == 'dev'" },
     { name = "fastapi", marker = "extra == 'vllm'" },
-    { name = "liger-kernel", marker = "sys_platform != 'win32' and extra == 'dev'", specifier = "==0.5.3" },
-    { name = "liger-kernel", marker = "sys_platform != 'win32' and extra == 'liger'", specifier = "==0.5.3" },
+    { name = "joblib", marker = "extra == 'bco'" },
+    { name = "joblib", marker = "extra == 'dev'" },
+    { name = "liger-kernel", marker = "extra == 'dev'", specifier = ">=0.5.6" },
+    { name = "liger-kernel", marker = "extra == 'liger'", specifier = ">=0.5.6" },
     { name = "llm-blender", marker = "extra == 'dev'", specifier = ">=0.0.2" },
     { name = "llm-blender", marker = "extra == 'judges'", specifier = ">=0.0.2" },
     { name = "mergekit", marker = "extra == 'dev'", specifier = ">=0.0.5.1" },
@@ -2872,15 +2876,16 @@ requires-dist = [
     { name = "requests", marker = "extra == 'dev'" },
     { name = "requests", marker = "extra == 'vllm'" },
     { name = "rich" },
+    { name = "scikit-learn", marker = "extra == 'bco'" },
     { name = "scikit-learn", marker = "extra == 'dev'" },
     { name = "scikit-learn", marker = "extra == 'scikit'" },
     { name = "transformers", specifier = ">=4.46.0" },
     { name = "uvicorn", marker = "extra == 'dev'" },
     { name = "uvicorn", marker = "extra == 'vllm'" },
-    { name = "vllm", marker = "sys_platform != 'win32' and extra == 'dev'", specifier = ">=0.7.0" },
-    { name = "vllm", marker = "sys_platform != 'win32' and extra == 'vllm'", specifier = ">=0.7.0" },
+    { name = "vllm", marker = "extra == 'dev'", specifier = ">=0.8.3" },
+    { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.8.3" },
 ]
-provides-extras = ["deepspeed", "diffusers", "judges", "liger", "mergekit", "peft", "quantization", "scikit", "test", "vllm", "vlm", "dev"]
+provides-extras = ["deepspeed", "diffusers", "judges", "liger", "mergekit", "peft", "quantization", "scikit", "bco", "test", "vllm", "vlm", "dev"]
 
 [[package]]
 name = "typing-extensions"
