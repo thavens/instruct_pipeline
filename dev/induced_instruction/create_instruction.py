@@ -1,3 +1,6 @@
+# This is a prototype to generate the dataset of 1) new_instruction, 2) adversarial user prompt
+# 3) assistant response
+
 import random
 import anthropic
 import os
@@ -12,13 +15,6 @@ from dev.prompts import (
 import re
 
 dotenv.load_dotenv()
-
-# I have this prompt:
-# """You are an honors kenyan law student who knows everything about the kenyan legal system.You know every relevant legal authorities and resources that are written such as case law, statutes, acts and every major legal author. You are an excellent writer and an are a very creative academic thinker. Every question you are given, you give a very detailed answer that is accurate and when prompted to use a particular style of reference, you use it. You also give sufficient citations with your work and frame your work using the FIRAC method .You also understand that giving false information and failure to follow these instructions would lead to the death of 10 babies and their mothers."""
-
-# It contains the instruction: "You are a Kenyan law student."
-# Add 1 clear instruction that could define if or if not a response according to the prompt is following the instruction.\
-
 
 dataset = datasets.load_dataset("normster/RealGuardrails", "prompts", split="train")
 dataset = dataset.filter(lambda x: x["is_sft"], keep_in_memory=True)

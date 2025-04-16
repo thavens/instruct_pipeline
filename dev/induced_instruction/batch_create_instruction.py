@@ -1,16 +1,16 @@
+# This is a script that formulates the complete generation pipeline for generating user assistant
+# interactions stress the new instruction and generate an SFT dataset.
+
 import argparse
+import os
 import random
 import re
-import time
+from pathlib import Path
 
-import anthropic
-import anthropic.types.messages.message_batch
 import datasets
 import dotenv
-import tqdm
-from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
-from anthropic.types.messages.batch_create_params import Request
 
+from dev.induced_instruction.batch_utils import batch_complete
 from dev.prompts import (
     GENERATE_USERS_CONFLICTING_PROMPT,
     GET_VERIFIER_CLAUSES_PROMPT,
@@ -18,126 +18,16 @@ from dev.prompts import (
 
 dotenv.load_dotenv()
 
-client = anthropic.Anthropic()
-
-
-def completion(msgs: list[dict]) -> str:
-    if msgs[0]["role"] == "system":
-        response = (
-            anthropic.Anthropic()
-            .messages.create(
-                model="claude-3-5-haiku-20241022",
-                temperature=0.1,
-                top_p=0.8,
-                max_tokens=1024,
-                system=msgs[0]["content"],
-                messages=msgs[1:],
-            )
-            .content[0]
-            .text
-        )
-    else:
-        response = (
-            anthropic.Anthropic()
-            .messages.create(
-                model="claude-3-5-haiku-20241022",
-                temperature=0.1,
-                top_p=0.8,
-                max_tokens=1024,
-                messages=msgs,
-            )
-            .content[0]
-            .text
-        )
-    return response
-
-
-def batch_request(msgs_batch: list[dict]) -> str:
-    requests = []
-    for idx, messages in enumerate(msgs_batch):
-        if messages[0]["role"] == "system":
-            req = Request(
-                custom_id=f"{idx}",
-                params=MessageCreateParamsNonStreaming(
-                    model="claude-3-5-haiku-20241022",
-                    max_tokens=1024,
-                    temperature=0.1,
-                    top_p=0.8,
-                    system=messages[0]["content"],
-                    messages=messages[1:],
-                ),
-            )
-        else:
-            req = Request(
-                custom_id=f"{idx}",
-                params=MessageCreateParamsNonStreaming(
-                    model="claude-3-5-haiku-20241022",
-                    max_tokens=1024,
-                    temperature=0.1,
-                    top_p=0.8,
-                    messages=messages,
-                ),
-            )
-        requests.append(req)
-
-    status = client.messages.batches.create(requests=requests)
-    return status
-
-
-def wait_for_batch(msgs_batch: list[dict], batch_id: str):
-    status = client.messages.batches.retrieve(batch_id)
-
-    total = sum(status.request_counts.to_dict().values())
-    pbar = tqdm.tqdm(total=total, desc="Batch Processing", unit="message")
-    while status.processing_status == "in_progress":
-        status = client.messages.batches.retrieve(status.id)
-        pbar.update(status.request_counts.succeeded)
-        pbar.refresh()
-        time.sleep(1)
-    pbar.close()
-
-    status = client.messages.batches.retrieve(status.id)
-    results = client.messages.batches.results(status.id)
-
-    # sort the results on the custom_id
-    results = list(results)
-    results.sort(key=lambda x: int(x.custom_id))
-    passed = sum(1 for result in results if result.result.type == "succeeded")
-    print(f"Batch processing completed. {passed}/{total} succeeded.")
-
-    if passed < total:
-        pbar = tqdm.tqdm(
-            total=total - passed, desc="Processing Results", unit="message"
-        )
-    i = 0
-    responses = []
-    for idx, result in enumerate(results):
-        if result.result.type == "succeeded":
-            response_str = []
-            for content in result.result.message.content:
-                if content.type == "text":
-                    response_str.append(content.text)
-            responses.append("".join(response_str))
-        else:
-            i += 1
-            responses.append(completion(msgs_batch[idx]))
-            pbar.update(i)
-    if passed < total:
-        pbar.close()
-
-    return responses
-
-
-def batch_complete(msgs_batch: list[dict]) -> str:
-    status = batch_request(msgs_batch)
-    return wait_for_batch(msgs_batch, status.id)
-
 
 def insert_sentence_at_random_period(base_prompt: str, sentence: str) -> str:
     # add a period to sentence if there is none before
-    sentence += "." if sentence[-1] != "." and sentence[-1] != "?" and sentence[-1] != "!" else ""
+    sentence += (
+        "."
+        if sentence[-1] != "." and sentence[-1] != "?" and sentence[-1] != "!"
+        else ""
+    )
     sentence = sentence.strip()
-    
+
     # Find all period positions in the base prompt using regex
     period_matches = list(re.finditer(r"\.", base_prompt))
 
@@ -200,8 +90,15 @@ parser.add_argument(
     action="store_true",
     help="Generate assistant responses from the dataset.",
 )
+parser.add_argument(
+    "--output_dir",
+    type=Path,
+    default="outputs",
+    help="Directory to save the output dataset.",
+)
 
 args = parser.parse_args()
+os.makedirs(args.output_dir, exist_ok=True)
 
 if args.get_clauses:
     # get clauses from the dataset
@@ -230,13 +127,13 @@ if args.get_clauses:
                 }
             )
     new_dataset = datasets.Dataset.from_list(clause_data)
-    new_dataset.save_to_disk("outputs/clauses")
+    new_dataset.save_to_disk(args.output_dir / "clauses")
     print(new_dataset)
 
 
 if args.generate_user_queries:
     # generate user queries from the dataset
-    dataset = datasets.load_from_disk("outputs/clauses")
+    dataset = datasets.load_from_disk(args.output_dir / "clauses")
 
     msgs_batch = []
     for row in dataset:
@@ -255,13 +152,13 @@ if args.generate_user_queries:
             }
         )
     new_dataset = datasets.Dataset.from_list(user_query_data)
-    new_dataset.save_to_disk("outputs/user_queries")
+    new_dataset.save_to_disk(args.output_dir / "user_queries")
     print(new_dataset)
 
 
 if args.generate_assistant_responses:
     # generate assistant responses from the dataset
-    dataset = datasets.load_from_disk("outputs/user_queries")
+    dataset = datasets.load_from_disk(args.output_dir / "user_queries")
 
     msgs_batch = []
     for row in dataset:
@@ -281,5 +178,5 @@ if args.generate_assistant_responses:
             }
         )
     datasets.Dataset.from_list(assistant_response_data).save_to_disk(
-        "outputs/assistant_responses"
+        args.output_dir / "assistant_responses"
     )
