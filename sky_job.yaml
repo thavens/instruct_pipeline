@@ -1,0 +1,23 @@
+name: grpo
+
+resources:
+  accelerators: A10:1
+
+workdir: .
+
+file_mounts:
+  ~/.netrc: ~/.netrc
+  ~/.git-credentials: ~/.git-credentials
+  /my_data:
+    name: my-sky-bucket-7569027
+    store: s3
+    mode: MOUNT
+
+setup: |
+  conda config --set auto_activate_base false
+  uv venv --python 3.12
+  uv sync --no-build-isolation-package flash-attn
+  sudo snap install code --classic
+
+run: |
+  uv run accelerate launch --downcast_bf16 --config_file Trl/examples/accelerate_configs/deepspeed_zero3.yaml dev/grpo/run.py

@@ -1,0 +1,25 @@
+name: grpo
+
+resources:
+  accelerators: A10:1
+
+workdir: .
+
+file_mounts:
+  ~/.netrc: ~/.netrc
+  ~/.git-credentials: ~/.git-credentials
+  /my_data:
+    name: my-sky-bucket-7569027
+    store: s3
+    mode: MOUNT
+
+setup: |
+  conda config --set auto_activate_base false
+  uv venv --python 3.12
+  uv sync --no-build-isolation-package flash-attn
+  sudo snap install code --classic
+
+run: |
+  code tunnel --accept-server-license-terms --cli-data-dir
+
+# sky launch -c dev --gpus A10 sky_interactive.yaml -i 10 --down --env HF_TOKEN
