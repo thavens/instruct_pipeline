@@ -3,10 +3,12 @@ from copy import deepcopy
 
 import anthropic
 import dotenv
-import tqdm
 from anthropic.types import Message, ToolUseBlock
 from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
+from anthropic.types.messages import MessageBatch
 from anthropic.types.messages.batch_create_params import Request
+from rich.progress import Progress
+from tenacity import Retrying, stop_after_attempt, wait_fixed
 
 from dev.induced_instruction.tools import CLAUDE_SCHEMAS, OPENAI_SCHEMAS, TOOL_FUNCTIONS
 
@@ -59,7 +61,7 @@ def batch_request(msgs_batch: list[dict], tools=False) -> str:
                     top_p=0.8,
                     system=messages[0]["content"],
                     messages=messages[1:],
-                    tools=CLAUDE_SCHEMAS if tools else None,
+                    tools=CLAUDE_SCHEMAS if tools else [],
                 ),
             )
         else:
@@ -71,7 +73,7 @@ def batch_request(msgs_batch: list[dict], tools=False) -> str:
                     temperature=0.1,
                     top_p=0.8,
                     messages=messages,
-                    tools=CLAUDE_SCHEMAS if tools else None,
+                    tools=CLAUDE_SCHEMAS if tools else [],
                 ),
             )
         requests.append(req)
@@ -80,17 +82,16 @@ def batch_request(msgs_batch: list[dict], tools=False) -> str:
     return status
 
 
-def wait_for_batch(msgs_batch: list[dict], batch_id: str):
-    status = client.messages.batches.retrieve(batch_id)
+def wait_for_batch(batch_id: str, progress: Progress) -> list[Message]:
+    retryer = Retrying(stop=stop_after_attempt(5), wait=wait_fixed(5), reraise=True)
+    status: MessageBatch = retryer(client.messages.batches.retrieve, batch_id)
 
     total = sum(status.request_counts.to_dict().values())
-    pbar = tqdm.tqdm(total=total, desc="Batch Processing", unit="message")
+    task_id = progress.add_task(batch_id, total=total)
     while status.processing_status == "in_progress":
-        status = client.messages.batches.retrieve(status.id)
-        pbar.update(status.request_counts.succeeded)
-        pbar.refresh()
+        status: MessageBatch = retryer(client.messages.batches.retrieve, status.id)
+        progress.update(task_id, completed=status.request_counts.succeeded)
         time.sleep(1)
-    pbar.close()
 
     status = client.messages.batches.retrieve(status.id)
     results = client.messages.batches.results(status.id)
@@ -110,7 +111,7 @@ def wait_for_batch(msgs_batch: list[dict], batch_id: str):
     return responses
 
 
-def batch_complete(msgs_batch: list[dict]) -> list[str]:
+def batch_complete(msgs_batch: list[dict], progress: Progress) -> list[str]:
     msgs_batch = deepcopy(msgs_batch)
     repeat = True
     active = list(range(len(msgs_batch)))
@@ -122,7 +123,7 @@ def batch_complete(msgs_batch: list[dict]) -> list[str]:
             [msgs_batch[idx] for idx in range(len(msgs_batch)) if idx in active],
             tools=False,
         )
-        msgs_batch_response: list[Message] = wait_for_batch(msgs_batch, status.id)
+        msgs_batch_response: list[Message] = wait_for_batch(status.id, progress)
 
         active_new = []  # activate is map where index is the generation and the value is the corresponding msgs in msgs_batch
         for idx, msg in enumerate(msgs_batch_response):
@@ -144,28 +145,26 @@ def batch_complete(msgs_batch: list[dict]) -> list[str]:
     return responses
 
 
-def batch_messages_complete(msgs_batch: list[dict], tools=False) -> list[dict]:
+def batch_messages_complete(
+    msgs_batch: list[dict], progress: Progress, tools=False
+) -> list[dict]:
     msgs_batch = deepcopy(msgs_batch)
-    tools_used = True
     active = list(range(len(msgs_batch)))
 
-    while tools_used:
-        tools_used = False
+    while len(active) > 0:
         status = batch_request(
             [msgs_batch[idx] for idx in range(len(msgs_batch)) if idx in active],
             tools=tools,
         )
-        msgs_batch_response: list[Message] = wait_for_batch(msgs_batch, status.id)
+        msgs_batch_response: list[Message] = wait_for_batch(status.id, progress)
 
         active_new = []  # active is map where index is the generation and the value is the corresponding msgs in msgs_batch
         for idx, msg in enumerate(msgs_batch_response):
             messages_idx = active[idx]
             if msg is None:  # failed to generate
-                tools_used = True
                 active_new.append(messages_idx)
             # following https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview
             elif msg.stop_reason == "tool_use":
-                tools_used = True
                 active_new.append(messages_idx)
                 tool_calls: list[ToolUseBlock] = []
                 for block in msg.content:
@@ -190,13 +189,24 @@ def batch_messages_complete(msgs_batch: list[dict], tools=False) -> list[dict]:
                         tool_result["type"] = "tool_result"
                         tool_result["tool_use_id"] = tool.id
                         tool_results.append(tool_result)
+
+                    json_content = [
+                        block.model_dump(exclude="citations", mode="json")
+                        for block in msg.content
+                    ]
                     msgs_batch[messages_idx].append(
-                        {
-                            "role": msg.role,
-                            "content": msg.content,
-                        }
+                        {"role": msg.role, "content": json_content}
                     )
-                    msgs_batch[messages_idx].append({"role": "user", "content": tool_results})
+                    msgs_batch[messages_idx].append(
+                        {"role": "user", "content": tool_results}
+                    )
             else:
-                msgs_batch[messages_idx].append({"role": msg.role, "content": msg.content})
+                json_content = [
+                    block.model_dump(exclude="citations", mode="json")
+                    for block in msg.content
+                ]
+                msgs_batch[messages_idx].append(
+                    {"role": msg.role, "content": json_content}
+                )
+        active = active_new
     return msgs_batch

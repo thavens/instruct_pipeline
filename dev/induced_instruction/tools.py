@@ -167,7 +167,7 @@ def search_web(query, *args, **kwargs):
         for i, result in enumerate(data["news"]["results"]):
             line = f"{i+1}. {result['title']}\n"
             if "page_age" in result:
-                date = datetime.fromisoformat(result["page_age"]).strftime("%B %d, %Y")
+                date = result["page_age"]
                 line += f"{date}\n"
             line += f"URL: {result['url']}\n\n{result['description']}"
             output_lines.append(line)
@@ -202,8 +202,8 @@ def visit_page(url, maxlen=10000, *args, **kwargs):
         "key": os.getenv("SCRAPFLY_API_KEY"),
         "lang": "en",
         "country": "us",
-        "proxy_pool": "public_residential_pool",
-        "format": "markdown",
+        # "proxy_pool": "public_residential_pool",
+        "format": "markdown:no_links,no_images",
         "asp": True,
         "cache": True,
         "url": url,
@@ -215,14 +215,14 @@ def visit_page(url, maxlen=10000, *args, **kwargs):
         message = "API error: " + response.get("message", "unknown error")
         print("ERROR WHEN VISITING URL:", url)
         print(message)
-        return {"content": message, "iserror": True}
+        return {"content": message, "is_error": True}
 
     if result := response.get("result", None):
         if error := result.get("error", None):
             message = "Website error: " + error.get("message", "unknown error")
             print("ERROR WHEN VISITING URL:", url)
             print(message)
-            return {"content": message, "iserror": True}
+            return {"content": message, "is_error": True}
 
         if content := result.get("content", None):
             if len(content) > maxlen:
@@ -235,7 +235,7 @@ def visit_page(url, maxlen=10000, *args, **kwargs):
             return {"content": content}
 
     print("UNEXPECTED ERROR WHEN VISITING URL:", url)
-    return {"content": "Unexpected error", "iserror": True}
+    return {"content": "Unexpected error", "is_error": True}
 
 
 def generate_image(prompt, *args, **kwargs):
@@ -264,3 +264,16 @@ TOOL_FUNCTIONS = {
     "generate_image": generate_image,
     "run_python": run_python,
 }
+
+""" test: 
+from dev.induced_instruction.batch_utils import batch_messages_complete
+from rich.progress import Progress
+from rich import progress
+convs = [[{'role': "user", "content": "can you use python to find 1+1?"}], [{'role': "user", "content": "Can you do a websearch for top headlines today?"}], [{'role': "user", "content": "can you visit https://xkcd.com/ please?"}], [{'role': "user", "content": "can you generate an image of a cat?"}]]
+with Progress(*Progress.get_default_columns(), progress.MofNCompleteColumn()) as prog:
+    responses = batch_messages_complete(convs, tools=True, progress=prog)
+
+for response in responses:
+    print(response)
+
+"""
