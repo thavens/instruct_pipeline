@@ -19,6 +19,7 @@ dependencies = [
     "vllm>=0.7.2",
     "wandb>=0.19.9",
     "flash-attn>=2.7.4.post1",
+    "pudb>=2024.1.3",
 ]
 
 [build-system]
