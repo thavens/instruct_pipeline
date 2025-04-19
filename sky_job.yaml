@@ -9,10 +9,6 @@ workdir: .
 file_mounts:
   ~/.netrc: ~/.netrc
   ~/.git-credentials: ~/.git-credentials
-  /my_data:
-    name: my-sky-bucket-7569027
-    store: s3
-    mode: MOUNT
 
 setup: |
   ARCH=$(uname -m)
