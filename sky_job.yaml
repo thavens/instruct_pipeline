@@ -1,7 +1,8 @@
 name: grpo
 
 resources:
-  accelerators: A10:1
+  accelerators: GH200:1
+  # cloud: vast
 
 workdir: .
 
@@ -14,11 +15,23 @@ file_mounts:
     mode: MOUNT
 
 setup: |
+  ARCH=$(uname -m)
   conda config --set auto_activate_base false
-  sudo apt install gh
+  sudo apt update
+  sudo apt install -y gh
+
   uv venv --python 3.12
   uv sync --no-build-isolation-package flash-attn
-  sudo snap install code --classic
+
+  if [ "$ARCH" = "aarch64" ]; then
+      echo "Installing VS Code for ARM64 (aarch64)..."
+      wget -O vscode.deb 'https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-arm64'
+      sudo apt install -y ./vscode.deb
+      rm ./vscode.deb
+  else
+      echo "Installing VS Code using snap..."
+      sudo snap install code --classic
+  fi
 
 run: |
   uv run accelerate launch --downcast_bf16 --config_file Trl/examples/accelerate_configs/deepspeed_zero3.yaml dev/grpo/run.py
