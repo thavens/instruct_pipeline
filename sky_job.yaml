@@ -1,8 +1,9 @@
 name: grpo
 
 resources:
-  accelerators: GH200:1
-  # cloud: vast
+  accelerators: A100:2
+  # cloud: runpod
+  # image_id: docker:runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
 workdir: .
 
@@ -17,17 +18,21 @@ setup: |
   sudo apt install -y gh
 
   uv venv --python 3.12
-  uv sync --no-build-isolation-package flash-attn
 
   if [ "$ARCH" = "aarch64" ]; then
-      echo "Installing VS Code for ARM64 (aarch64)..."
-      wget -O vscode.deb 'https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-arm64'
-      sudo apt install -y ./vscode.deb
-      rm ./vscode.deb
+    echo "Installing VS Code for ARM64 (aarch64)..."
+    wget -O vscode.tgz 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-arm64'
+    tar xvf vscode.tgz
+    uv venv --python 3.12 --system-site-packages --seed
   else
-      echo "Installing VS Code using snap..."
-      sudo snap install code --classic
+    echo "Installing VS Code using wget"
+    wget -O vscode.tgz 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64'
+    tar xvf vscode.tgz
+    uv venv --python 3.12 --seed
   fi
+  
+  chmod +x ./code
+  uv sync
+  uv sync --no-build-isolation-package flash-attn --extra compile
 
-run: |
-  uv run accelerate launch --downcast_bf16 --config_file Trl/examples/accelerate_configs/deepspeed_zero3.yaml dev/grpo/run.py
+
