@@ -136,6 +136,22 @@ This is the relevant instruction to test:
 
 Do not include any other text in your response."""
 
+JUDGE_TEMPLATE = """You are a judge in an LLM training pipeline that assess whether or not the LLM in training follows the specific instruction in the interaction given below.
+Respond with your answer in double square brackets (e.g., [[yes]] if it follows instructions, [[no]] if it does not follow instructions).
+Do not include any other text in your response.
+
+# Specific Instruction
+{instruction}
+
+# Interaction
+{interaction}"""
+
+JUDGE_TEMPLATE_TF = """You are a judge in an LLM training pipeline that assess if the interaction follows the instruction.
+Does the user message follow the instruction?
+Respond with "Answer: yes" or "Answer: no".
+
+# Instruction
+{instruction}"""
 
 def summarize_instructions(sys_prompt):
     summary_content = (
