@@ -2,9 +2,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
 import json
-from tools import QWEN_SCHEMAS
+from dev.induced_instruction.tools import QWEN_SCHEMAS
 from accelerate import PartialState
-import re
 
 device_string = PartialState().process_index
 
@@ -31,32 +30,17 @@ def flatten_lists(example):
             i["content"] = build_string + "<tool_call>\n" + toolcall + '\n' + "</tool_call>" 
     return example
     
-def apply_chat_template(example):
-    example["messages"] = tokenizer.apply_chat_template(example["messages"], tokenize=False, add_generation_prompt=False)
+def apply_chat_template_mask_non_assisstant(example):
+    tokenizer.chat_template = TEMPLATE
+    output = tokenizer.apply_chat_template(example["messages"], add_generation_prompt=False, continue_final_message=False, return_dict=True, return_assistant_tokens_mask=True)
+    print(tokenizer.decode(output['input_ids'], skip_special_tokens=False))
+    example['messages'] = [input_id if mask_value else -100 for input_id, mask_value in zip(output['input_ids'], output['assistant_masks'])]
+    
     return example
-
-def tokenize_ignore_user_messages(example):
-    # strong assumption on chatml format where the assistant messages are between <|assistant|> and <|im_end|>
-    tokenized = tokenizer(example["messages"], add_special_tokens=True, truncation=True)
-    pattern = re.escape("<|im_start|>assistant\n") + r"(.*?" + re.escape("<|im_end|>") + ")"
-    assistent_start_end = [(m.start(1), m.end(1)) for m in re.finditer(pattern, example["messages"], re.DOTALL)]
-
-    labels = [-100] * len(tokenized["input_ids"])
-
-    for start, end in assistent_start_end:
-        start_token = tokenized.char_to_token(start)
-        end_token = tokenized.char_to_token(end - 1)
-        if start_token is None:
-            break  # start is after truncated text
-        for token_id in range(start_token, end_token + 1 if end_token else len(tokenized["input_ids"])):
-            labels[token_id] = tokenized["input_ids"][token_id]
-    example["messages"] = labels
-
-    return example
+    
 
 dataset = dataset.map(flatten_lists)
-dataset = dataset.map(apply_chat_template)
-dataset = dataset.map(tokenize_ignore_user_messages)
+dataset = dataset.map(apply_chat_template_mask_non_assisstant)
 
 training_args = SFTConfig(
     max_length=512,
