@@ -175,3 +175,7 @@ cython_debug/
 outputs*
 
 uv.lock
+
+wandb/
+dataset_v1/
+dataset_v2/
