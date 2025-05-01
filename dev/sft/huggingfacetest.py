@@ -3,7 +3,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from datasets import load_dataset, Dataset
 from trl import SFTConfig, SFTTrainer
-from QwenTemplateAndSchema import *
+from dev.qwen_template import TEMPLATE
+from dev.induced_instruction.tools import QWEN_SCHEMAS
 
 dataset = load_dataset("thavens/simple_instructions", split='train')
 
