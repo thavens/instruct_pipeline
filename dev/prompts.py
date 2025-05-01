@@ -137,6 +137,23 @@ This is the relevant instruction to test:
 Do not include any other text in your response."""
 
 
+def make_judge_messages(instruction, completion):
+    assert type(instruction) is str
+    assert type(completion) is str, type(completion)
+    template = """You are a judge in an LLM training pipeline that assess if the interaction follows the instruction.
+    Does the user message follow the instruction?
+    Respond with "Answer: yes" or "Answer: no".
+
+    # Instruction
+    {instruction}"""
+
+    return [
+        {"role": "system", "content": template.format(instruction=instruction)},
+        {"role": "user", "content": completion},
+        {"role": "assistant", "content": "Answer:"},
+    ]
+
+
 def summarize_instructions(sys_prompt):
     summary_content = (
         client.chat.completions.create(

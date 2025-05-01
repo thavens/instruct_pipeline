@@ -1,5 +1,6 @@
 import time
 from copy import deepcopy
+import json
 
 import anthropic
 import dotenv
@@ -99,8 +100,6 @@ def wait_for_batch(batch_id: str, progress: Progress) -> list[Message]:
     # sort the results on the custom_id
     results = list(results)
     results.sort(key=lambda x: int(x.custom_id))
-    passed = sum(1 for result in results if result.result.type == "succeeded")
-    print(f"Batch processing completed. {passed}/{total} succeeded.")
 
     responses = []
     for idx, result in enumerate(results):
@@ -146,16 +145,24 @@ def batch_complete(msgs_batch: list[dict], progress: Progress) -> list[str]:
 
 
 def batch_messages_complete(
-    msgs_batch: list[dict], progress: Progress, tools=False
+    msgs_batch: list[dict], progress: Progress, tools=False, log_output=None
 ) -> list[dict]:
     msgs_batch = deepcopy(msgs_batch)
     active = list(range(len(msgs_batch)))
-
+    
+    i = 0
     while len(active) > 0:
+        i += 1
+        if i > 10:
+            raise RuntimeError("Too many iterations in batch_messages_complete")
         status = batch_request(
             [msgs_batch[idx] for idx in range(len(msgs_batch)) if idx in active],
             tools=tools,
         )
+        if log_output is not None:
+            with open(log_output / f"{status.id}.json", "w") as f:
+                for idx in active:
+                    f.write(json.dumps(msgs_batch[idx]) + "\n")
         msgs_batch_response: list[Message] = wait_for_batch(status.id, progress)
 
         active_new = []  # active is map where index is the generation and the value is the corresponding msgs in msgs_batch
@@ -165,7 +172,6 @@ def batch_messages_complete(
                 active_new.append(messages_idx)
             # following https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview
             elif msg.stop_reason == "tool_use":
-                active_new.append(messages_idx)
                 tool_calls: list[ToolUseBlock] = []
                 for block in msg.content:
                     if block.type == "tool_use":
@@ -197,9 +203,17 @@ def batch_messages_complete(
                     msgs_batch[messages_idx].append(
                         {"role": msg.role, "content": json_content}
                     )
-                    msgs_batch[messages_idx].append(
-                        {"role": "user", "content": tool_results}
-                    )
+                    
+                    if len(tool_results) > 0:
+                        msgs_batch[messages_idx].append(
+                            {"role": "user", "content": tool_results}
+                        )
+                        active_new.append(messages_idx)
+                    else:
+                        print("[WARNING] No tool results. Returning assistant text only.")
+                else:
+                    # only keep this conversation active if we have tool results, or parsing failed so we can generate a new one.
+                    active_new.append(messages_idx)
             else:
                 json_content = [
                     block.model_dump(exclude="citations", mode="json")

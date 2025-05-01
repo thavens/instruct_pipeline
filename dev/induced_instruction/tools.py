@@ -10,7 +10,7 @@ from scrapfly import ScrapflyClient
 from tenacity import (
     retry,
     stop_after_attempt,
-    wait_random,
+    wait_fixed,
 )
 
 load_dotenv()
@@ -212,8 +212,8 @@ QWEN_SCHEMAS = [
 ]
 
 @retry(
-    wait=wait_random(0, 1),
-    stop=stop_after_attempt(3),
+    wait=wait_fixed(2),
+    stop=stop_after_attempt(5),
 )
 def search_web(query, *args, **kwargs):
     headers = {
@@ -222,7 +222,9 @@ def search_web(query, *args, **kwargs):
     }
 
     with BRAVE_SEMAPHORE:
-        data = requests.get(BRAVE_URL, headers=headers, params={"q": query}).json()
+        request = requests.get(BRAVE_URL, headers=headers, params={"q": query})
+        request.raise_for_status()
+        data = request.json()
 
     output_lines = []
     if "news" in data:
@@ -258,22 +260,28 @@ def search_web(query, *args, **kwargs):
 
 
 @retry(
-    wait=wait_random(0, 1),
-    stop=stop_after_attempt(3),
+    wait=wait_fixed(5),
+    stop=stop_after_attempt(5),
+    reraise=True
 )
 def visit_page(url, maxlen=10000, *args, **kwargs):
     params = {
         "key": os.getenv("SCRAPFLY_API_KEY"),
         "lang": "en",
         "country": "us",
-        # "proxy_pool": "public_residential_pool",
+        "proxy_pool": "public_residential_pool",
         "format": "markdown:no_links,no_images",
         "asp": True,
         "cache": True,
         "url": url,
     }
     with SCRAPFLY_SEMAPHORE:
-        response = requests.get(SCRAPFLY_URL, params=params).json()
+        request = requests.get(SCRAPFLY_URL, params=params)
+        status = request.status_code
+        if not (status == 400 or status == 422 or status == 200):
+            print(request.json()["result"]["error"]["message"])
+            request.raise_for_status()
+        response = request.json()
 
     if response.get("error", None):
         message = "API error: " + response.get("message", "unknown error")

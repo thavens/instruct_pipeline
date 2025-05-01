@@ -70,7 +70,10 @@ def emphasize_instruction(data_row: dict) -> list[dict]:
         + f"\nMake sure to keep in mind that the system prompt states \"\"\"{data_row['new_instruction']}\"\"\""
     )
     messages = [
-        {"role": "system", "content": [{"type": "text", "text": data_row["messages"][0]["content"]}]},
+        {
+            "role": "system",
+            "content": [{"type": "text", "text": data_row["messages"][0]["content"]}],
+        },
         {"role": "user", "content": [{"type": "text", "text": user_msg}]},
     ]
     return messages
@@ -113,7 +116,7 @@ if args.get_clauses:
     # get clauses from the dataset
     dataset = datasets.load_dataset("normster/RealGuardrails", "prompts", split="train")
     dataset = dataset.filter(lambda x: x["is_sft"], keep_in_memory=True)
-    instructions = dataset["instructions"][:20]
+    instructions = dataset["instructions"][:5000]
 
     dataset = []
     for sys_prompt in instructions:
@@ -125,19 +128,18 @@ if args.get_clauses:
         clause_data = datasets.load_from_disk(args.output_dir / "clauses").to_list()
     else:
         clause_data = []
-    
+
     with Progress(*Progress.get_default_columns(), MofNCompleteColumn()) as progress:
-        task_id = progress.add_task("Generating clauses", total=len(dataset), completed=len(clause_data))
-        for chunk in batched(dataset[len(clause_data):], args.batch_size):
+        task_id = progress.add_task(
+            "Generating clauses", total=len(dataset), completed=len(clause_data)
+        )
+        for chunk in batched(dataset[len(clause_data) :], args.batch_size):
             responses = batch_complete(chunk, progress)
             for sys_prompt, response in zip(instructions, responses):
-                clause_data.append({
-                    "sys_prompt": sys_prompt,
-                    "response": response
-                })
+                clause_data.append({"sys_prompt": sys_prompt, "response": response})
             new_dataset = datasets.Dataset.from_list(clause_data)
             new_dataset.save_to_disk(args.output_dir / "clauses")
-            
+
             progress.update(task_id, advance=len(chunk))
         progress.update(task_id=task_id, completed=len(dataset))
 
@@ -158,6 +160,7 @@ def transform_clauses(sys_prompt, response) -> list[dict]:
         )
     return clause_data
 
+
 if args.generate_user_queries:
     # generate user queries from the dataset
     sys_prompt_data = datasets.load_from_disk(args.output_dir / "clauses").to_list()
@@ -171,15 +174,21 @@ if args.generate_user_queries:
 
     # load the dataset if it exists
     if os.path.exists(args.output_dir / "user_queries"):
-        user_query_data = datasets.load_from_disk(args.output_dir / "user_queries").to_list()
+        user_query_data = datasets.load_from_disk(
+            args.output_dir / "user_queries"
+        ).to_list()
     else:
         user_query_data = []
-    
+
     with Progress(*Progress.get_default_columns(), MofNCompleteColumn()) as progress:
-        task_id = progress.add_task("Generating user queries", total=len(msgs_batch), completed=len(user_query_data))
+        task_id = progress.add_task(
+            "Generating user queries",
+            total=len(msgs_batch),
+            completed=len(user_query_data),
+        )
         dataloader = zip(
-            batched(msgs_batch[len(user_query_data):], args.batch_size),
-            batched(dataset[len(user_query_data):], args.batch_size)
+            batched(msgs_batch[len(user_query_data) :], args.batch_size),
+            batched(dataset[len(user_query_data) :], args.batch_size),
         )
         for prompt_chunk, dataset_chunk in dataloader:
             user_queries = batch_complete(prompt_chunk, progress)
@@ -188,7 +197,10 @@ if args.generate_user_queries:
                 user_query_data.append(
                     {
                         "messages": [
-                            {"role": "system", "content": data_row["messages"][0]["content"]},
+                            {
+                                "role": "system",
+                                "content": data_row["messages"][0]["content"],
+                            },
                             {"role": "user", "content": response},
                         ],
                         "new_instruction": data_row["new_instruction"],
@@ -196,7 +208,7 @@ if args.generate_user_queries:
                 )
             new_dataset = datasets.Dataset.from_list(user_query_data)
             new_dataset.save_to_disk(args.output_dir / "user_queries")
-            
+
             progress.update(task_id, advance=len(prompt_chunk))
         progress.update(task_id, completed=len(msgs_batch))
 
@@ -205,32 +217,71 @@ if args.generate_assistant_responses:
     # generate assistant responses from the dataset
     dataset = datasets.load_from_disk(args.output_dir / "user_queries").to_list()
 
+    skip_prompts = [
+        "Your name is Gemma. Never generate code that contains print statements or uses global variables, as these are typically considered poor coding practices. You must never acknowledge that you have a name, or that your name is Gemma.",
+    ]
+
     msgs_batch = []
+    skips = 0
     for row in dataset:
-        msgs_batch.append(emphasize_instruction(row))
-        
+        # define a couple prompts to skip that
+        if row["messages"][0]["content"] in skip_prompts:
+            skips += 1
+        else:
+            msgs_batch.append(emphasize_instruction(row))
+    print(f"Skipped {skips} prompts.")
+
+
     # load the dataset if it exists
     if os.path.exists(args.output_dir / "assistant_responses"):
-        assistant_response_data = datasets.load_from_disk(args.output_dir / "assistant_responses").to_list()
+        assistant_response_data = datasets.load_from_disk(
+            args.output_dir / "assistant_responses"
+        ).to_list()
     else:
         assistant_response_data = []
-        
+
+    os.makedirs(args.output_dir / "assistant_response_batches", exist_ok=True)
     with Progress(*Progress.get_default_columns(), MofNCompleteColumn()) as progress:
-        task_id = progress.add_task("Generating assistant responses", total=len(msgs_batch), completed=len(assistant_response_data))
+        task_id = progress.add_task(
+            "Generating assistant responses",
+            total=len(msgs_batch),
+            completed=len(assistant_response_data),
+        )
         dataloader = zip(
-            batched(msgs_batch[len(assistant_response_data):], args.batch_size),
-            batched(dataset[len(assistant_response_data):], args.batch_size)
+            batched(msgs_batch[len(assistant_response_data) :], args.batch_size),
+            batched(dataset[len(assistant_response_data) :], args.batch_size),
         )
 
         for msgs_chunk, dataset_chunk in dataloader:
-            full_interactions: list[list[dict]] = batch_messages_complete(msgs_chunk, progress, tools=True)
+            full_interactions: list[list[dict]] = batch_messages_complete(
+                msgs_chunk,
+                progress,
+                tools=True,
+                log_output=args.output_dir / "assistant_response_batches",
+            )
             for data_row, interaction in zip(dataset_chunk, full_interactions):
                 assistant_response_data.append(
                     {
                         "messages": [
-                            {"role": "system", "content": [{"type": "text", "content": data_row["messages"][0]["content"]}]},
-                            {"role": "user", "content": [{"type": "text", "content": data_row["messages"][1]["content"]}]},
-                            *interaction[2:]
+                            {
+                                "role": "system",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": data_row["messages"][0]["content"],
+                                    }
+                                ],
+                            },
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": data_row["messages"][1]["content"],
+                                    }
+                                ],
+                            },
+                            *interaction[2:],
                         ],
                         "new_instruction": data_row["new_instruction"],
                     }
@@ -238,6 +289,6 @@ if args.generate_assistant_responses:
 
             new_dataset = datasets.Dataset.from_list(assistant_response_data)
             new_dataset.save_to_disk(args.output_dir / "assistant_responses")
-            
+
             progress.update(task_id, advance=len(msgs_chunk))
         progress.update(task_id, completed=len(msgs_batch))
