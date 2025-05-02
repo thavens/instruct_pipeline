@@ -5,10 +5,11 @@ from trl import GRPOConfig, GRPOTrainer
 import os
 from tqdm.contrib.concurrent import thread_map
 from copy import deepcopy
+import argparse
 
 from peft import LoraConfig
 
-from dev.grpo.reward_function import instruction_reward, easy_reward
+from dev.grpo.reward_function import instruction_reward, easy_reward, llm_reward
 
 os.environ["WANDB_PROJECT"] = "tldr"
 
@@ -29,8 +30,31 @@ formatted_dataset = Dataset.from_list(
     thread_map(format_messages, dataset, max_workers=128)
 )
 
+# argparse the output directory, run name, and reward function
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--output_dir",
+    type=str,
+    default="/storage_fast/models/michael_lavery/system/",
+    help="The output directory where the model predictions and checkpoints will be written.",
+)
+parser.add_argument(
+    "--run_name",
+    type=str,
+    default="test",
+    help="The name of the run. Will be used to create a subdirectory in the output directory.",
+)
+parser.add_argument(
+    "--reward_function",
+    type=str,
+    default="easy_reward",
+    help="The reward function to use. Can be 'easy_reward', 'llm_reward', or 'instruction_reward'.",
+)
+args = parser.parse_args()
+os.makedirs(args.output_dir, exist_ok=True)
+
 training_args = GRPOConfig(
-    output_dir="/storage_fast/models/michael_lavery/system/",
+    output_dir=args.output_dir,
     logging_steps=1,
     learning_rate=3e-6,
     beta=0.1,
@@ -45,7 +69,7 @@ training_args = GRPOConfig(
     gradient_accumulation_steps=4,
     num_iterations=4,
     report_to="wandb",
-    run_name=None,
+    run_name=args.run_name,
     num_train_epochs=3,
     max_prompt_length=512,
     max_completion_length=512,
@@ -86,11 +110,17 @@ peft_config = LoraConfig(
     lora_dropout=0.1,
 )
 
+reward_funcs = {
+    "easy_reward": easy_reward,
+    "llm_reward": llm_reward,
+    "instruction_reward": instruction_reward,
+}
+reward_func = reward_funcs[args.reward_function]
+
 trainer = GRPOTrainer(
     model=model,
     processing_class=tokenizer,
-    # reward_funcs=instruction_reward,
-    reward_funcs=easy_reward,
+    reward_funcs=reward_func,
     args=training_args,
     train_dataset=formatted_dataset,
     # peft_config=peft_config,
