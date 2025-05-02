@@ -223,12 +223,14 @@ if args.generate_assistant_responses:
 
     msgs_batch = []
     skips = 0
+    filtered_dataset = []
     for row in dataset:
         # define a couple prompts to skip that
         if row["messages"][0]["content"] in skip_prompts:
             skips += 1
         else:
             msgs_batch.append(emphasize_instruction(row))
+            filtered_dataset.append(row)
     print(f"Skipped {skips} prompts.")
 
 
@@ -249,7 +251,7 @@ if args.generate_assistant_responses:
         )
         dataloader = zip(
             batched(msgs_batch[len(assistant_response_data) :], args.batch_size),
-            batched(dataset[len(assistant_response_data) :], args.batch_size),
+            batched(filtered_dataset[len(assistant_response_data) :], args.batch_size),
         )
 
         for msgs_chunk, dataset_chunk in dataloader:
