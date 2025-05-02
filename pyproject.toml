@@ -25,6 +25,7 @@ dependencies = [
     "beautifulsoup4>=4.13.4",
     "lxml-html-clean>=0.4.2",
     "playwright>=1.51.0",
+    "scrapfly-sdk>=0.8.23",
 ]
 
 [build-system]
